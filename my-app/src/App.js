@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_ENDPOINT = 'http://localhost:5000/predict'; // Replace with your API URL
+const API_ENDPOINT = 'process.env.REACT_APP_API_URL + '/predict';
+
 
 function App() {
   const [message, setMessage] = useState('');
