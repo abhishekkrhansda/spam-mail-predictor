@@ -1,50 +1,57 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
-import numpy as np
+import os
 import traceback
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Enhanced CORS
+CORS(app)
 
-# Load models with error handling
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load models safely
 try:
-    model = joblib.load('spam_model.pkl')
-    vectorizer = joblib.load('tfidf_vectorizer.pkl')
+    model = joblib.load(os.path.join(BASE_DIR, "spam_model.pkl"))
+    vectorizer = joblib.load(os.path.join(BASE_DIR, "tfidf_vectorizer.pkl"))
     print("✅ Models loaded! Ready for predictions.")
 except Exception as e:
-    print(f"❌ Model load failed: {e}")
+    print("❌ Model load failed:", e)
     model = vectorizer = None
 
-@app.route('/')
+@app.route("/")
 def home():
-    return jsonify({"status": "API running ✅", "endpoint": "/predict"})
+    return jsonify({
+        "status": "API running ✅",
+        "endpoint": "/predict"
+    })
 
-@app.route('/predict', methods=['POST', 'OPTIONS'])  # Allow OPTIONS too
+@app.route("/predict", methods=["POST"])
 def predict():
-    if request.method == 'OPTIONS':
-        return '', 200
-    
     try:
+        if not model or not vectorizer:
+            return jsonify({"error": "Model not loaded"}), 500
+
         data = request.get_json()
-        if not data or not data.get('message', '').strip():
+        if not data or not data.get("message", "").strip():
             return jsonify({"error": "Empty message"}), 400
-        
-        message = [data['message'].strip()]
+
+        message = [data["message"].strip()]
         features = vectorizer.transform(message)
+
         prediction = int(model.predict(features)[0])
-        probabilities = model.predict_proba(features)[0]
-        confidence = float(max(probabilities))
-        
+        confidence = float(model.predict_proba(features)[0].max())
+
         return jsonify({
             "spam": prediction == 1,
-            "confidence": confidence,
-            "label": "SPAM" if prediction == 1 else "HAM"
+            "label": "SPAM" if prediction == 1 else "HAM",
+            "confidence": confidence
         })
-        
-    except Exception as e:
-        print(f"❌ Prediction error: {traceback.format_exc()}")
-        return jsonify({"error": "Prediction failed", "details": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    except Exception:
+        print(traceback.format_exc())
+        return jsonify({"error": "Prediction failed"}), 500
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
